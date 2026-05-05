@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>N2_DEBUGGER v7.2</title>
+    <title>N2_DEBUGGER v8.0</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -18,56 +18,28 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState } = React;
+const { useState, useEffect } = React;
 
 // ============================================================
-// 題庫區 — Gemini 只需要新增題目到這裡
-// 格式：{ id, layer, verb, context, q, options, correct, hint, review }
+// Apps Script URL — 這裡填入你的 Web App URL
 // ============================================================
-const RAW_QUESTIONS = [
-  // Layer 0: 動詞分類
+const API_URL = 'https://script.google.com/macros/s/AKfycbyI7HqSgwJ6it5Tiv6CMX5-qykBeOEml5m5P-RtWaHej1uu_yxOaiW6jLrMKlN-Q-9UIg/exec';
+
+// ============================================================
+// 備用題庫 — 當網路無法連線時使用
+// ============================================================
+const FALLBACK_QUESTIONS = [
   { id: 1, layer: 0, verb: "書く", context: "芙莉蓮：刻下勇者的名字。", q: "「書く」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 0, hint: "字尾非る", review: "第一類：字尾非「る」者皆為一類。如：書く、飲む、話す。" },
   { id: 2, layer: 0, verb: "食べる", context: "宿儺：吞下手指。", q: "「食べる」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 1, hint: "字尾る，前為え段", review: "第二類：字尾る，倒數第二音為い或え段。如：食べる、見る、起きる。" },
   { id: 3, layer: 0, verb: "来る", context: "咒術：叫增援過來。", q: "「来る」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 2, hint: "只有兩個", review: "不規則動詞只有兩個：くる（カ變）和する（サ變）。" },
   { id: 4, layer: 0, verb: "帰る", context: "職場：今天要早點回家。", q: "「帰る」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 0, hint: "外表像二類！", review: "特殊一類：帰る、切る、知る、入る、走る。外表像二類，實際是一類。" },
   { id: 5, layer: 0, verb: "する", context: "善逸：被逼著修行。", q: "「する」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 2, hint: "只有兩個", review: "不規則動詞只有兩個：くる（カ變）和する（サ變）。" },
-  { id: 501, layer: 0, verb: "走る", context: "鬼滅：善逸全力奔跑逃避修行。", q: "「走る」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 0, hint: "外表像二類實則一類", review: "特殊一類：走る的否定是走らない，不是走れない，確認是一類。" },
-  { id: 502, layer: 0, verb: "信じる", context: "芙莉蓮：相信欣梅爾說過的話。", q: "「信じる」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 1, hint: "字尾る前為い段", review: "第二類：しんじる。字尾る，前為じ（い段），標準二類。" },
-  { id: 505, layer: 0, verb: "借りる", context: "職場：跟同事借筆電。", q: "「借りる」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 1, hint: "二類經典", review: "第二類：かりる。雖然看起來像一類，但是標準二類動詞。" },
-  { id: 509, layer: 0, verb: "居る(いる)", context: "芙莉蓮：待在勇者的故鄉。", q: "「居る（いる）」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 1, hint: "單音節+る", review: "第二類：單音節+る（いる、みる）通常為二類。" },
-  { id: 511, layer: 0, verb: "要る(いる)", context: "職場：這任務需要更多人力。", q: "「要る（いる）」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 0, hint: "陷阱題！", review: "特殊一類：雖然讀音是いる，但變化為要らない，確認是一類。" },
-  { id: 515, layer: 0, verb: "浴びる", context: "鬼滅：在瀑布下修行。", q: "「浴びる」是哪一類動詞？", options: ["第一類", "第二類", "不規則"], correct: 1, hint: "字尾る前為い段", review: "第二類：あびる。屬於上一段動詞，標準二類。" },
-
-  // Layer 1: 動詞變化
-  { id: 101, layer: 1, verb: "書く → 受身形", context: "芙莉蓮：勇者之名被刻在石上。", q: "名は石に（　）。", options: ["書かせる", "書かれる", "書かされる", "書けられる"], correct: 1, hint: "受身形", review: "一類受身：u → a + れる。書く → 書かれる。表達客觀事實或受害感。" },
-  { id: 102, layer: 1, verb: "食べる → 使役形", context: "宿儺：強迫伏黑吞下手指。", q: "伏黒に指を（　）。", options: ["食べられた", "食べさせた", "食べさせられた", "食べていた"], correct: 1, hint: "使役形", review: "二類使役：去る + させる。食べる → 食べさせる。表達讓/叫某人做某事。" },
-  { id: 103, layer: 1, verb: "する → 使役受身", context: "善逸：被迫接受修行。", q: "修行を（　）。", options: ["させられた", "された", "させた", "しられた"], correct: 0, hint: "被迫做", review: "する的使役受身：させられる。表達被迫做不情願的事，帶有強烈無奈感。" },
-  { id: 104, layer: 1, verb: "待つ → 使役受身", context: "職場：被迫在雨中等了一小時。", q: "雨の中、一時間も（　）。", options: ["待たれた", "待たせた", "待たされた", "待たせられた"], correct: 2, hint: "縮略形", review: "一類使役受身縮略：待たせられる → 待たされる。一類動詞常用縮略形。" },
-  { id: 105, layer: 1, verb: "褒める → 受身形", context: "職場：被上司誇獎了。", q: "上司に（　）、嬉しかった。", options: ["褒めさせた", "褒められた", "褒めさせられた", "褒めさせる"], correct: 1, hint: "受身形", review: "二類受身：去る + られる。褒める → 褒められる。" },
-  { id: 503, layer: 1, verb: "呼ぶ → 受身形", context: "咒術：虎杖被五條老師叫過去。", q: "五条先生に（　）。", options: ["呼ばせた", "呼ばれた", "呼ばされた", "呼びられた"], correct: 1, hint: "受身形", review: "一類受身：u → a + れる。呼ぶ → 呼ばれる。" },
-  { id: 504, layer: 1, verb: "作る → 使役形", context: "職場：PM讓設計師製作新Banner。", q: "デザイナーにバナーを（　）。", options: ["作らせた", "作られた", "作らされた", "作りさせた"], correct: 0, hint: "使役形", review: "一類使役：u → a + せる。作る → 作らせる。" },
-  { id: 508, layer: 1, verb: "書く → 使役受身", context: "職場：因為出錯，被迫寫了悔過書。", q: "反省文を（　）。", options: ["書かせた", "書かれた", "書かされた", "書けられる"], correct: 2, hint: "被迫寫", review: "一類使役受身縮略：書かせられる → 書かされた。" },
-  { id: 521, layer: 1, verb: "歌う → 使役受身", context: "鬼滅：善逸被迫在聚會上唱歌。", q: "パーティーで歌を（　）。", options: ["歌わせられた", "歌われた", "歌わされた", "歌いさせた"], correct: 2, hint: "縮略形", review: "一類使役受身：歌わせられる → 歌わされる（縮略形）。" },
-  { id: 523, layer: 1, verb: "練習する → 使役受身", context: "芙莉蓮：被迫每天練習魔法一千次。", q: "毎日千回も魔法を（　）。", options: ["練習させられた", "練習された", "練習させた", "練習しさせた"], correct: 0, hint: "三類無縮略", review: "三類（する）：只能用させられる，沒有縮略形。" },
-  { id: 527, layer: 1, verb: "飲む → 使役受身", context: "咒術：被迫喝下噁心的咒物。", q: "呪物を（　）。", options: ["飲まれた", "飲ませた", "飲まされた", "飲みさせた"], correct: 2, hint: "縮略形", review: "一類使役受身：飲ませられる → 飲まされる。" },
-  { id: 529, layer: 1, verb: "起きる → 使役受身", context: "芙莉蓮：每天早上被迫六點起床。", q: "毎朝六時に（　）。", options: ["起きさせられた", "起きられた", "起きされた", "起きさせた"], correct: 0, hint: "二類無縮略", review: "二類使役受身：去る + させられる。沒有縮略形。" },
-  { id: 536, layer: 1, verb: "直す → 使役受身", context: "職場：程式出錯，被迫週末修正。", q: "土日にバグを（　）。", options: ["直させられた", "直された", "直させた", "直しさせた"], correct: 0, hint: "さ行注意", review: "一類さ行：直させる → 直させられる。さ行結尾不可縮略。" },
-
-  // Layer 3: N2 句型
-  { id: 301, layer: 3, verb: "に限り", context: "真題Q33：一日乘車券僅限當天有效。", q: "ご購入いただいた当日（　）、何度でも乗り降りができます。", options: ["につれ", "に際し", "にわたり", "に限り"], correct: 3, hint: "限定", review: "に限り：唯獨、僅限。常用於規則或限定優惠。例：本日に限り半額。" },
-  { id: 302, layer: 3, verb: "からには", context: "真題Q34：既然決定了，就好好相處。", q: "決まった（　）、うまく付き合っていこうと思う。", options: ["からには", "わりには", "ばかりか", "どころか"], correct: 0, hint: "既然…就", review: "からには：既然決定了某事，就要有相應覺悟。後接意志、義務或決心。" },
-  { id: 303, layer: 3, verb: "ところがある", context: "真題Q38：雖然認真，但有太嚴肅的地方。", q: "仕事熱心だが、少しまじめすぎる（　）。", options: ["ことになっている", "ところがある", "がちだ", "ものだ"], correct: 1, hint: "有…之處", review: "ところがある：有…的傾向或特點。多用於描述性格，語氣較委婉。" },
-  { id: 304, layer: 3, verb: "に違いない", context: "真題Q40：他一定還沒在考慮結婚。", q: "彼はきっとまだ結婚は（　）。", options: ["考えなくなってもしかたない", "考えなくなるに違いない", "考えていなくてもしかたない", "考えていないに違いない"], correct: 3, hint: "現在狀態推測", review: "に違いない時態：推測現在用 ている＋に違いない，推測過去用 た＋に違いない。" },
-  { id: 305, layer: 3, verb: "抜きで", context: "職場：今天直接說重點，不客套。", q: "今日は遠慮（　）、本題に入りましょう。", options: ["をこめて", "抜きで", "に限り", "をもとに"], correct: 1, hint: "省去、不帶", review: "抜きで：省去某事物。固定搭配：冗談抜きで（說正經的）。" },
-  { id: 306, layer: 3, verb: "としてではなく", context: "真題Q36：想以教師而非演奏家身份教學。", q: "演奏家（　）、教師として子供たちに教えたい。", options: ["にとってではなく", "としてではなく", "としてだったら", "にとってだったら"], correct: 1, hint: "否定身份", review: "としてではなく：不是以…身份，而是以…身份。として表身份，ではなく表否定。" },
-  { id: 307, layer: 3, verb: "ずに済む", context: "職場：多虧提早準備，不用加班就解決了。", q: "早めに準備したおかげで、残業（　）。", options: ["せずに済んだ", "しないで済まなかった", "せずに済まなかった", "しなくて済んだ"], correct: 0, hint: "不用…就解決", review: "ずに済む：不需要做（麻煩的）事情就解決了。する動詞 → せずに済む。" },
-  { id: 541, layer: 3, verb: "からには", context: "鬼滅：既然拿起了劍，就一定要保護大家。", q: "刀を握った（　）、みんなを守ってみせる。", options: ["に限り", "からには", "を通じて", "ものの"], correct: 1, hint: "既然…就", review: "からには：既然已做了某事，後項常接意志或決心。" },
-  { id: 542, layer: 3, verb: "わりには", context: "芙莉蓮：雖然是矮人，動作卻非常敏捷。", q: "ドワーフの（　）、動きが素早い。", options: ["からには", "にわたって", "わりには", "どころか"], correct: 2, hint: "與預期不符", review: "わりには：相對於…來說，卻…。強調基準與結果的落差。" },
-  { id: 543, layer: 3, verb: "ものの", context: "職場：雖然同意了規格變更，但心裡不安。", q: "仕様変更に同意した（　）、不安が残る。", options: ["ものの", "に際して", "からには", "を通じて"], correct: 0, hint: "雖說…但是", review: "ものの：表示認可前項事實，但後項發生相反或不理想狀況。" },
-  { id: 544, layer: 3, verb: "どころか", context: "咒術：虎杖別說拔除咒靈，連碰都碰不到。", q: "祓う（　）、触れることさえできない。", options: ["に限り", "わりには", "どころか", "にわたって"], correct: 2, hint: "別說…連", review: "どころか：強烈否定前項，強調程度遠不止於此。" },
-  { id: 545, layer: 3, verb: "にわたって", context: "芙莉蓮：數百年的旅途中遇到了許多人。", q: "数百年に（　）旅の中で、多くの人と出会った。", options: ["際して", "わたって", "通じて", "限って"], correct: 1, hint: "跨越、遍及", review: "にわたって：用於表示時間或空間的廣大範圍。" },
-  { id: 546, layer: 3, verb: "に際して", context: "職場：在專案啟動之際，團隊聚餐。", q: "キックオフに（　）、チームで食事をした。", options: ["わたって", "際して", "通じて", "対して"], correct: 1, hint: "在…之際", review: "に際して：在某個特殊或正式事情開始之前。語感莊重正式。" },
-  { id: 547, layer: 3, verb: "を通じて", context: "咒術：透過媒體，宿儺的存在被大眾知曉。", q: "メディアを（　）、その存在が知れ渡った。", options: ["際して", "通じて", "わたって", "限って"], correct: 1, hint: "透過…媒介", review: "を通じて：表示透過某種媒介、管道達成某事。" },
+  { id: 101, layer: 1, verb: "書く → 受身形", context: "芙莉蓮：勇者之名被刻在石上。", q: "名は石に（　）。", options: ["書かせる", "書かれる", "書かされる", "書けられる"], correct: 1, hint: "受身形", review: "一類受身：u → a + れる。書く → 書かれる。" },
+  { id: 102, layer: 1, verb: "食べる → 使役形", context: "宿儺：強迫伏黑吞下手指。", q: "伏黒に指を（　）。", options: ["食べられた", "食べさせた", "食べさせられた", "食べていた"], correct: 1, hint: "使役形", review: "二類使役：去る + させる。食べる → 食べさせる。" },
+  { id: 103, layer: 1, verb: "する → 使役受身", context: "善逸：被迫接受修行。", q: "修行を（　）。", options: ["させられた", "された", "させた", "しられた"], correct: 0, hint: "被迫做", review: "する的使役受身：させられる。" },
+  { id: 104, layer: 1, verb: "待つ → 使役受身", context: "職場：被迫在雨中等了一小時。", q: "雨の中、一時間も（　）。", options: ["待たれた", "待たせた", "待たされた", "待たせられた"], correct: 2, hint: "縮略形", review: "一類使役受身縮略：待たせられる → 待たされる。" },
+  { id: 301, layer: 3, verb: "からには", context: "真題Q34：既然決定了，就好好相處。", q: "決まった（　）、うまく付き合っていこうと思う。", options: ["からには", "わりには", "ばかりか", "どころか"], correct: 0, hint: "既然…就", review: "からには：既然決定了某事，就要有相應覺悟。" },
+  { id: 302, layer: 3, verb: "に限り", context: "真題Q33：一日乘車券僅限當天有效。", q: "ご購入いただいた当日（　）、何度でも乗り降りができます。", options: ["につれ", "に際し", "にわたり", "に限り"], correct: 3, hint: "限定", review: "に限り：唯獨、僅限。常用於規則或限定優惠。" },
 ];
 
 const LAYER_LABELS = { 0: "L0 動詞分類", 1: "L1 動詞變化", 3: "L3 N2句型" };
@@ -75,17 +47,33 @@ const UNLOCK_THRESHOLD = 0.6;
 
 const loadStats = () => {
   try {
-    const s = localStorage.getItem('n2_v72_stats');
+    const s = localStorage.getItem('n2_v8_stats');
     return s ? JSON.parse(s) : { weights: {}, unlocked: [0], consecutiveCorrect: {}, errorLog: [] };
   } catch { return { weights: {}, unlocked: [0], consecutiveCorrect: {}, errorLog: [] }; }
 };
 
 const saveStats = (s) => {
-  try { localStorage.setItem('n2_v72_stats', JSON.stringify(s)); } catch {}
+  try { localStorage.setItem('n2_v8_stats', JSON.stringify(s)); } catch {}
+};
+
+// 上傳單筆錯題到 Google Sheets
+const uploadError = async (errorItem) => {
+  try {
+    await fetch(API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(errorItem)
+    });
+  } catch (e) {
+    console.log('上傳錯題失敗，資料已存在本機', e);
+  }
 };
 
 function App() {
-  const [screen, setScreen] = useState('home');
+  const [screen, setScreen] = useState('loading');
+  const [questions, setQuestions] = useState([]);
+  const [loadError, setLoadError] = useState(false);
   const [layer, setLayer] = useState(0);
   const [queue, setQueue] = useState([]);
   const [idx, setIdx] = useState(0);
@@ -93,10 +81,31 @@ function App() {
   const [results, setResults] = useState([]);
   const [stats, setStats] = useState(loadStats);
 
+  // 啟動時從 Google Sheets 讀取題庫
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        const res = await fetch(API_URL + '?t=' + Date.now());
+        const data = await res.json();
+        if (data.status === 'ok' && data.questions.length > 0) {
+          setQuestions(data.questions);
+        } else {
+          setQuestions(FALLBACK_QUESTIONS);
+          setLoadError(true);
+        }
+      } catch (e) {
+        setQuestions(FALLBACK_QUESTIONS);
+        setLoadError(true);
+      }
+      setScreen('home');
+    };
+    fetchQuestions();
+  }, []);
+
   const updateStats = (ns) => { setStats(ns); saveStats(ns); };
 
   const buildQueue = (l) => {
-    const pool = RAW_QUESTIONS.filter(q => q.layer === l);
+    const pool = questions.filter(q => q.layer === l);
     const hot = pool.filter(q => (stats.weights[q.id] || 1) > 1);
     const normal = pool.filter(q => (stats.weights[q.id] || 1) <= 1).sort(() => Math.random() - 0.5);
     return [...hot, ...normal].slice(0, Math.min(10, pool.length)).sort(() => Math.random() - 0.5);
@@ -127,21 +136,29 @@ function App() {
     } else {
       ns.consecutiveCorrect[q.id] = 0;
       ns.weights[q.id] = (ns.weights[q.id] || 1) * 3;
-      // 記錄錯題
+
+      const errorItem = {
+        date: new Date().toLocaleDateString('zh-TW'),
+        id: q.id,
+        layer: q.layer,
+        verb: q.verb,
+        q: q.q,
+        myAnswer: q.options[optIdx],
+        correct: q.options[q.correct],
+      };
+
+      // 本機記錄
       const existing = ns.errorLog.findIndex(e => e.id === q.id);
       if (existing >= 0) {
         ns.errorLog[existing].count += 1;
-        ns.errorLog[existing].lastWrong = new Date().toLocaleDateString('zh-TW');
-        ns.errorLog[existing].myAnswer = q.options[optIdx];
+        ns.errorLog[existing].lastWrong = errorItem.date;
+        ns.errorLog[existing].myAnswer = errorItem.myAnswer;
       } else {
-        ns.errorLog.push({
-          id: q.id, layer: q.layer, verb: q.verb,
-          q: q.q, correct: q.options[q.correct],
-          myAnswer: q.options[optIdx],
-          review: q.review, hint: q.hint,
-          count: 1, lastWrong: new Date().toLocaleDateString('zh-TW')
-        });
+        ns.errorLog.push({ ...errorItem, count: 1, hint: q.hint, review: q.review });
       }
+
+      // 自動上傳到 Google Sheets
+      uploadError(errorItem);
     }
 
     const newResults = [...results, correct];
@@ -164,19 +181,34 @@ function App() {
   const accuracy = results.length ? Math.round(results.filter(Boolean).length / results.length * 100) : 0;
   const allErrors = (stats.errorLog || []).sort((a, b) => b.count - a.count);
 
+  // ── Loading ──
+  if (screen === 'loading') return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+      <div style={{ width: '24px', height: '24px', border: '2px solid #30a46c', borderBottomColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <div style={{ fontSize: '11px', color: '#484f58' }}>從 Google Sheets 讀取題庫...</div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
   // ── Home ──
   if (screen === 'home') return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
       <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
         <div style={{ fontSize: '10px', color: '#30a46c', letterSpacing: '0.15em', marginBottom: '0.5rem' }}>JLPT N2 // 2026.07.05</div>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#e6edf3', margin: 0 }}>N2_DEBUGGER</h1>
-        <div style={{ fontSize: '10px', color: '#484f58', marginTop: '0.25rem' }}>v7.2 — 錯題追蹤版</div>
+        <div style={{ fontSize: '10px', color: '#484f58', marginTop: '0.25rem' }}>v8.0 — Sheets 動態題庫版</div>
+        {loadError && (
+          <div style={{ fontSize: '10px', color: '#f59e0b', marginTop: '0.5rem' }}>⚠ 使用備用題庫（網路未連線）</div>
+        )}
+        {!loadError && (
+          <div style={{ fontSize: '10px', color: '#30a46c', marginTop: '0.5rem' }}>● 題庫已從 Sheets 載入（{questions.length} 題）</div>
+        )}
       </div>
 
       <div style={{ width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {[0, 1, 3].map(l => {
           const unlocked = stats.unlocked.includes(l);
-          const pool = RAW_QUESTIONS.filter(q => q.layer === l);
+          const pool = questions.filter(q => q.layer === l);
           const hotCount = pool.filter(q => (stats.weights[q.id] || 1) > 1).length;
           return (
             <button key={l} onClick={() => unlocked && startSession(l)} disabled={!unlocked}
@@ -196,7 +228,18 @@ function App() {
           );
         })}
 
-        {/* 錯題本入口 */}
+        <button onClick={() => setScreen('grammar')}
+          style={{ background: '#0f1a0f', border: '1px solid #30a46c50', borderRadius: '12px', padding: '1.25rem', textAlign: 'left', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '10px', color: '#30a46c', marginBottom: '0.25rem' }}>📖 文法手冊</div>
+              <div style={{ color: '#e6edf3', fontWeight: 600, fontSize: '15px' }}>公式・例句・記憶口訣</div>
+              <div style={{ fontSize: '11px', color: '#484f58', marginTop: '0.25rem' }}>受身・使役・使役受身・N2句型</div>
+            </div>
+            <span style={{ color: '#30a46c', fontSize: '1.25rem' }}>→</span>
+          </div>
+        </button>
+
         {allErrors.length > 0 && (
           <button onClick={() => setScreen('errorbook')}
             style={{ background: '#1a0f0f', border: '1px solid #f8514950', borderRadius: '12px', padding: '1.25rem', textAlign: 'left', cursor: 'pointer' }}>
@@ -204,7 +247,7 @@ function App() {
               <div>
                 <div style={{ fontSize: '10px', color: '#f85149', marginBottom: '0.25rem' }}>📓 錯題本</div>
                 <div style={{ color: '#e6edf3', fontWeight: 600, fontSize: '15px' }}>查看所有錯題紀錄</div>
-                <div style={{ fontSize: '11px', color: '#484f58', marginTop: '0.25rem' }}>共 {allErrors.length} 個弱點句型</div>
+                <div style={{ fontSize: '11px', color: '#484f58', marginTop: '0.25rem' }}>共 {allErrors.length} 個弱點句型 · 自動同步至 Sheets</div>
               </div>
               <span style={{ color: '#f85149', fontSize: '1.25rem' }}>→</span>
             </div>
@@ -213,10 +256,84 @@ function App() {
       </div>
 
       <div style={{ marginTop: '2rem', fontSize: '10px', color: '#30363d', textAlign: 'center', lineHeight: 1.8 }}>
-        正確率 60% 解鎖下一層 · 錯題出現機率 x3<br />連續答對兩次後恢復正常權重
+        正確率 60% 解鎖下一層 · 錯題出現機率 x3<br />錯題自動上傳 Google Sheets · Gemini 每週更新題庫
       </div>
     </div>
   );
+
+  // ── 文法手冊 ──
+  if (screen === 'grammar') {
+    const GRAMMAR_DATA = [
+      { id: 'passive', title: '受身形 (Passive)', color: '#388bfd', tag: '被…', summary: '表達「被某人做某事」。分直接受身（有受害者）和客觀受身（描述事實）兩種。', formula: [{ type: '第一類', rule: 'u → a + れる', ex: '書く → 書かれる', exTw: '被寫' }, { type: '第二類', rule: '去る + られる', ex: '食べる → 食べられる', exTw: '被吃' }, { type: '不規則', rule: '固定變化', ex: 'する→される　くる→こられる', exTw: '被做/被來' }], memory: '一類：把 u 換成 a，加れる。二類：去掉る，加られる。', examples: [{ jp: '先生に褒められた。', tw: '被老師誇獎了。（直接受身）', tag: 'N4' }, { jp: '雨に降られて困った。', tw: '被雨淋，很困擾。（間接受身）', tag: 'N3' }, { jp: 'この寺は400年前に建てられた。', tw: '這座寺廟建於400年前。（客觀事實）', tag: 'N2' }], trap: 'N2 考點：「間接受身」主語是因此受困擾的人，不是直接被做的對象。如：雨に降られた（被雨淋到，很倒霉）。' },
+      { id: 'causative', title: '使役形 (Causative)', color: '#30a46c', tag: '讓/叫…做', summary: '上位者讓或命令下位者做某事。PM 指派任務、父母叫孩子做事都用這個。', formula: [{ type: '第一類', rule: 'u → a + せる', ex: '書く → 書かせる', exTw: '讓某人寫' }, { type: '第二類', rule: '去る + させる', ex: '食べる → 食べさせる', exTw: '讓某人吃' }, { type: '不規則', rule: '固定變化', ex: 'する→させる　くる→こさせる', exTw: '讓做/讓來' }], memory: '一類：把 u 換成 a，加せる。二類：去掉る，加させる。', examples: [{ jp: '部下にレポートを書かせた。', tw: '讓部下寫了報告。（命令）', tag: 'N4' }, { jp: '子供に野菜を食べさせた。', tw: '讓孩子吃了蔬菜。（強制）', tag: 'N4' }, { jp: '明日休ませていただけませんか。', tw: '能讓我明天請假嗎？（極禮貌）', tag: 'N2' }], trap: 'N2 必考：使役形 + ていただく = 極禮貌的「請讓我做…」。職場聽解常出現。' },
+      { id: 'caus-pass', title: '使役受身 (Causative-Passive)', color: '#f85149', tag: '被迫做…', summary: '被迫做不想做的事，帶強烈無奈感。N2 聽解用來判斷說話者情緒的關鍵語法。', formula: [{ type: '第一類（縮略）', rule: 'u → a + される', ex: '書く → 書かされる', exTw: '被迫寫（常用）' }, { type: '第二類', rule: '去る + させられる', ex: '食べる → 食べさせられる', exTw: '被迫吃' }, { type: '不規則', rule: '固定變化', ex: 'する→させられる', exTw: '被迫做' }], memory: '一類縮略形最常用（書かされる）。二類和三類沒有縮略形。さ行結尾一類不可縮略（直させられる，不能說直さされる）。', examples: [{ jp: '善逸は修行をさせられた。', tw: '善逸被迫接受修行。（鬼滅）', tag: 'N4' }, { jp: '週末なのに会社に来させられた。', tw: '明明是週末卻被迫來公司。', tag: 'N3' }, { jp: '一時間も待たされた。', tw: '被迫等了整整一小時。', tag: 'N2' }], trap: '陷阱：一類さ行（話す、貸す、直す）不能縮略。話させられる 是正確的，不能說 話さされる。' },
+      { id: 'karaniva', title: 'からには', color: '#f59e0b', tag: '既然…就', summary: '既然做了或決定了某事，後項要有相應的覺悟、責任或決心。', formula: [{ type: '接續', rule: '動詞普通形 + からには', ex: '決めたからには', exTw: '既然決定了' }], memory: '語感：「既然都這樣了，就要負責到底」。後面常接 なければならない、つもりだ、覚悟だ。', examples: [{ jp: 'PMになったからには、責任を持って進める。', tw: '既然成為PM，就要負責推進。', tag: 'N2' }, { jp: '決まったからには、うまく付き合っていこう。', tw: '既然決定了，就好好相處。（真題）', tag: 'N2' }], trap: '容易混淆 わりには（雖然…但）、ものの（雖說…但）。からには 強調「覺悟和責任」。' },
+      { id: 'wariniva', title: 'わりには', color: '#8b5cf6', tag: '雖然…但（出乎意料）', summary: '相對於某個基準或條件，結果出乎意料。帶有主觀的驚訝或落差感。', formula: [{ type: '接續', rule: '動詞普通形/名詞の + わりには', ex: '十年働いているわりには', exTw: '雖然工作了十年' }], memory: '語感：「以…的程度來說，結果卻不成比例」。重點是落差感。', examples: [{ jp: '善逸は臆病なわりには、実力はかなりのものだ。', tw: '善逸雖然膽小，實力卻相當強。', tag: 'N2' }, { jp: '八十年のわりには、短く感じた旅だった。', tw: '雖然花了八十年，感覺卻像一瞬間。', tag: 'N2' }], trap: 'わりには 前面必須是可以量化或評價的條件（年齡、經歷、外表）。' },
+      { id: 'monono', title: 'ものの', color: '#06b6d4', tag: '雖說…但（轉折）', summary: '承認前項事實，但後項出現令人遺憾或不理想的轉折。語感比けど更正式。', formula: [{ type: '接續', rule: '動詞普通形 + ものの', ex: '同意したものの', exTw: '雖然同意了' }], memory: '語感：「雖然確實是這樣，但結果不如預期」。後項常是遺憾或矛盾。', examples: [{ jp: '仕様変更に同意したものの、不安が残る。', tw: '雖然同意規格變更，但心裡不安。', tag: 'N2' }, { jp: '内定をもらったものの、給与が希望に届かない。', tw: '雖然拿到錄取，但薪資不如預期。', tag: 'N2' }], trap: 'ものの 後面不能接正面積極的結果，一定是轉折或遺憾的狀況。' },
+      { id: 'dokoroka', title: 'どころか', color: '#ec4899', tag: '別說…連', summary: '強烈否定前項，強調實際情況比前項說的還要差或極端。', formula: [{ type: '接續', rule: '名詞/動詞普通形 + どころか', ex: '進捗があるどころか', exTw: '別說有進度了' }], memory: '語感：「豈止是A，連B都…」。帶有強烈否定和誇張感。', examples: [{ jp: '反撃どころか、動きを追うことさえ難しい。', tw: '別說反擊，連看清動作都很難。', tag: 'N2' }, { jp: '進捗があるどころか、むしろ遅れている。', tw: '不只沒有進度，反而退步了。', tag: 'N2' }], trap: 'どころか 和 わりには 差別：どころか 是強烈否定，わりには 是出乎意料的落差。' },
+    ];
+
+    const [openId, setOpenId] = useState(null);
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #21262d', display: 'flex', alignItems: 'center', gap: '1rem', background: '#0d1117', position: 'sticky', top: 0, zIndex: 10 }}>
+          <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: '#8b949e', cursor: 'pointer', fontSize: '14px' }}>← 返回</button>
+          <span style={{ fontSize: '13px', fontWeight: 700, color: '#30a46c' }}>📖 文法手冊</span>
+          <span style={{ fontSize: '10px', color: '#484f58', marginLeft: 'auto' }}>點擊展開</span>
+        </div>
+        <div style={{ flex: 1, padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '480px', margin: '0 auto', width: '100%' }}>
+          {GRAMMAR_DATA.map(g => (
+            <div key={g.id} style={{ background: '#161b22', border: `1px solid ${openId === g.id ? g.color + '60' : '#21262d'}`, borderRadius: '12px', overflow: 'hidden' }}>
+              <button onClick={() => setOpenId(openId === g.id ? null : g.id)}
+                style={{ width: '100%', padding: '1rem 1.25rem', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '10px', background: g.color + '20', color: g.color, padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 700 }}>{g.tag}</span>
+                  <span style={{ color: '#e6edf3', fontWeight: 600, fontSize: '14px' }}>{g.title}</span>
+                </div>
+                <span style={{ color: '#484f58', fontSize: '11px' }}>{openId === g.id ? '▲' : '▼'}</span>
+              </button>
+              {openId === g.id && (
+                <div style={{ borderTop: `1px solid ${g.color}30`, padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ fontSize: '12px', color: '#8b949e', lineHeight: 1.7 }}>{g.summary}</div>
+                  <div>
+                    <div style={{ fontSize: '10px', color: g.color, fontWeight: 700, marginBottom: '0.5rem' }}>變化公式</div>
+                    {g.formula.map((f, i) => (
+                      <div key={i} style={{ background: '#0d1117', borderRadius: '8px', padding: '0.75rem', marginBottom: '0.4rem', display: 'grid', gridTemplateColumns: '90px 1fr', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '10px', color: '#484f58' }}>{f.type}</span>
+                        <div>
+                          <div style={{ fontSize: '10px', color: '#8b949e' }}>{f.rule}</div>
+                          <div style={{ fontSize: '13px', color: g.color, fontWeight: 600 }}>{f.ex}</div>
+                          <div style={{ fontSize: '10px', color: '#484f58' }}>{f.exTw}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: g.color + '10', border: `1px solid ${g.color}30`, borderRadius: '8px', padding: '0.75rem' }}>
+                    <div style={{ fontSize: '10px', color: g.color, fontWeight: 700, marginBottom: '0.25rem' }}>記憶口訣</div>
+                    <div style={{ fontSize: '11px', color: '#e6edf3', lineHeight: 1.7 }}>{g.memory}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', color: g.color, fontWeight: 700, marginBottom: '0.5rem' }}>實戰例句</div>
+                    {g.examples.map((e, i) => (
+                      <div key={i} style={{ background: '#0d1117', borderRadius: '8px', padding: '0.75rem', marginBottom: '0.4rem', borderLeft: `3px solid ${g.color}` }}>
+                        <span style={{ fontSize: '9px', color: g.color, background: g.color + '20', padding: '0.1rem 0.4rem', borderRadius: '3px' }}>{e.tag}</span>
+                        <div style={{ fontSize: '13px', color: '#e6edf3', marginTop: '0.35rem', lineHeight: 1.6 }}>{e.jp}</div>
+                        <div style={{ fontSize: '11px', color: '#484f58', marginTop: '0.2rem' }}>{e.tw}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: '#1a1200', border: '1px solid #f59e0b30', borderRadius: '8px', padding: '0.75rem' }}>
+                    <div style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 700, marginBottom: '0.25rem' }}>⚠ N2 考試陷阱</div>
+                    <div style={{ fontSize: '11px', color: '#8b949e', lineHeight: 1.7 }}>{g.trap}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // ── 錯題本 ──
   if (screen === 'errorbook') return (
@@ -224,45 +341,40 @@ function App() {
       <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #21262d', display: 'flex', alignItems: 'center', gap: '1rem', background: '#0d1117', position: 'sticky', top: 0, zIndex: 10 }}>
         <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: '#8b949e', cursor: 'pointer', fontSize: '14px' }}>← 返回</button>
         <span style={{ fontSize: '13px', fontWeight: 700, color: '#f85149' }}>📓 錯題本</span>
-        <span style={{ fontSize: '10px', color: '#484f58', marginLeft: 'auto' }}>共 {allErrors.length} 題 · 按錯誤次數排序</span>
+        <span style={{ fontSize: '10px', color: '#484f58', marginLeft: 'auto' }}>{allErrors.length} 題 · 自動同步 Sheets</span>
       </div>
-
       <div style={{ flex: 1, padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '480px', margin: '0 auto', width: '100%' }}>
-        {allErrors.map((e, i) => (
-          <div key={e.id} style={{ background: '#161b22', border: '1px solid #f8514930', borderRadius: '12px', overflow: 'hidden' }}>
-            {/* Header */}
-            <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #21262d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a0f0f' }}>
-              <span style={{ fontSize: '10px', color: '#f85149', fontWeight: 700 }}>L{e.layer} · {e.verb}</span>
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                <span style={{ fontSize: '10px', color: '#484f58' }}>最後錯誤：{e.lastWrong}</span>
-                <span style={{ fontSize: '10px', background: '#f8514920', color: '#f85149', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>錯 {e.count} 次</span>
-              </div>
-            </div>
-
-            {/* 題目 */}
-            <div style={{ padding: '1rem' }}>
-              <div style={{ fontSize: '13px', color: '#e6edf3', marginBottom: '0.75rem', lineHeight: 1.6 }}>{e.q}</div>
-
-              {/* 我的答案 vs 正解 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '10px', color: '#f85149', minWidth: '60px' }}>我選了</span>
-                  <span style={{ fontSize: '12px', color: '#f85149', background: '#f8514915', padding: '0.25rem 0.75rem', borderRadius: '6px', border: '1px solid #f8514930' }}>{e.myAnswer}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '10px', color: '#30a46c', minWidth: '60px' }}>正確答案</span>
-                  <span style={{ fontSize: '12px', color: '#30a46c', background: '#30a46c15', padding: '0.25rem 0.75rem', borderRadius: '6px', border: '1px solid #30a46c30', fontWeight: 700 }}>{e.correct}</span>
+        {allErrors.length === 0
+          ? <div style={{ textAlign: 'center', color: '#484f58', padding: '4rem 0', fontSize: '13px' }}>還沒有錯題紀錄</div>
+          : allErrors.map((e, i) => (
+            <div key={e.id} style={{ background: '#161b22', border: '1px solid #f8514930', borderRadius: '12px', overflow: 'hidden' }}>
+              <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #21262d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a0f0f' }}>
+                <span style={{ fontSize: '10px', color: '#f85149', fontWeight: 700 }}>L{e.layer} · {e.verb}</span>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '10px', color: '#484f58' }}>{e.lastWrong}</span>
+                  <span style={{ fontSize: '10px', background: '#f8514920', color: '#f85149', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>錯 {e.count} 次</span>
                 </div>
               </div>
-
-              {/* 解釋 */}
-              <div style={{ background: '#0d1117', borderRadius: '8px', padding: '0.75rem', borderLeft: '3px solid #30a46c' }}>
-                <div style={{ fontSize: '10px', color: '#30a46c', marginBottom: '0.25rem', fontWeight: 700 }}>HINT: {e.hint}</div>
-                <div style={{ fontSize: '11px', color: '#8b949e', lineHeight: 1.7 }}>{e.review}</div>
+              <div style={{ padding: '1rem' }}>
+                <div style={{ fontSize: '13px', color: '#e6edf3', marginBottom: '0.75rem', lineHeight: 1.6 }}>{e.q}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                  <div style={{ fontSize: '11px' }}>
+                    <span style={{ color: '#484f58' }}>我選了：</span>
+                    <span style={{ color: '#f85149' }}>{e.myAnswer}</span>
+                  </div>
+                  <div style={{ fontSize: '11px' }}>
+                    <span style={{ color: '#484f58' }}>正確答案：</span>
+                    <span style={{ color: '#30a46c', fontWeight: 700 }}>{e.correct}</span>
+                  </div>
+                </div>
+                <div style={{ background: '#0d1117', borderRadius: '8px', padding: '0.6rem 0.75rem', borderLeft: '2px solid #30a46c' }}>
+                  <div style={{ fontSize: '10px', color: '#30a46c', marginBottom: '0.2rem' }}>HINT: {e.hint}</div>
+                  <div style={{ fontSize: '11px', color: '#8b949e', lineHeight: 1.6 }}>{e.review}</div>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        }
       </div>
     </div>
   );
@@ -283,7 +395,6 @@ function App() {
             {results.map((r, i) => <div key={i} style={{ width: '8px', height: '8px', borderRadius: '50%', background: r ? '#30a46c' : '#f85149' }} />)}
           </div>
         </div>
-
         <div style={{ flex: 1, padding: '1.5rem 1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: '480px', margin: '0 auto', width: '100%' }}>
           <div style={{ fontSize: '12px', color: '#484f58', fontStyle: 'italic', marginBottom: '1.25rem', padding: '0.75rem', background: '#161b22', borderRadius: '8px', borderLeft: '3px solid #21262d' }}>{q.context}</div>
           <div style={{ fontSize: '11px', color: '#30a46c', marginBottom: '0.5rem' }}>{q.verb}</div>
@@ -309,7 +420,6 @@ function App() {
             })}
           </div>
         </div>
-
         {answered && (
           <div style={{ padding: '1.25rem', borderTop: `3px solid ${isCorrect ? '#30a46c' : '#f85149'}`, background: '#161b22' }}>
             <div style={{ fontSize: '12px', color: isCorrect ? '#30a46c' : '#f85149', fontWeight: 700, marginBottom: '0.5rem' }}>
@@ -333,38 +443,31 @@ function App() {
       <div style={{ fontSize: '11px', color: '#484f58', marginBottom: '2rem' }}>
         {accuracy >= 60 ? '達到解鎖閾值 ✓' : '繼續練習強化弱點'}
       </div>
-
       {missed.length > 0 && (
         <div style={{ width: '100%', maxWidth: '400px', marginBottom: '1.5rem', textAlign: 'left' }}>
-          <div style={{ fontSize: '11px', color: '#f85149', fontWeight: 700, marginBottom: '0.75rem', padding: '0 0.25rem' }}>本次錯題 ({missed.length})</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '50vh', overflowY: 'auto' }} className="hide-scrollbar">
+          <div style={{ fontSize: '11px', color: '#f85149', fontWeight: 700, marginBottom: '0.75rem' }}>本次錯題（已自動上傳 Sheets）</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '45vh', overflowY: 'auto' }} className="hide-scrollbar">
             {missed.map((q, i) => {
-              const myAns = q.options[selected];
               const log = (stats.errorLog || []).find(e => e.id === q.id);
               return (
                 <div key={i} style={{ background: '#161b22', border: '1px solid #f8514930', borderRadius: '10px', padding: '1rem' }}>
-                  <div style={{ fontSize: '10px', color: '#f85149', marginBottom: '0.5rem' }}>L{q.layer} · {q.verb}</div>
-                  <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '0.75rem' }}>{q.q}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.75rem' }}>
-                    <div style={{ fontSize: '11px' }}>
-                      <span style={{ color: '#484f58' }}>我選了：</span>
-                      <span style={{ color: '#f85149' }}>{log ? log.myAnswer : '—'}</span>
-                    </div>
-                    <div style={{ fontSize: '11px' }}>
-                      <span style={{ color: '#484f58' }}>正確答案：</span>
-                      <span style={{ color: '#30a46c', fontWeight: 700 }}>{q.options[q.correct]}</span>
-                    </div>
+                  <div style={{ fontSize: '10px', color: '#f85149', marginBottom: '0.4rem' }}>L{q.layer} · {q.verb}</div>
+                  <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '0.6rem' }}>{q.q}</div>
+                  <div style={{ fontSize: '11px', marginBottom: '0.3rem' }}>
+                    <span style={{ color: '#484f58' }}>我選了：</span>
+                    <span style={{ color: '#f85149' }}>{log ? log.myAnswer : '—'}</span>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#8b949e', background: '#0d1117', padding: '0.6rem 0.75rem', borderRadius: '6px', borderLeft: '2px solid #30a46c', lineHeight: 1.6 }}>
-                    {q.review}
+                  <div style={{ fontSize: '11px', marginBottom: '0.6rem' }}>
+                    <span style={{ color: '#484f58' }}>正確答案：</span>
+                    <span style={{ color: '#30a46c', fontWeight: 700 }}>{q.options[q.correct]}</span>
                   </div>
+                  <div style={{ fontSize: '11px', color: '#8b949e', background: '#0d1117', padding: '0.6rem', borderRadius: '6px', borderLeft: '2px solid #30a46c', lineHeight: 1.6 }}>{q.review}</div>
                 </div>
               );
             })}
           </div>
         </div>
       )}
-
       <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <button onClick={() => startSession(layer)}
           style={{ background: '#161b22', border: '1px solid #30a46c', borderRadius: '10px', padding: '1rem', color: '#30a46c', fontSize: '14px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>

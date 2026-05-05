@@ -53,7 +53,7 @@ const loadStats = () => {
 };
 
 const saveStats = (s) => {
-  try { localStorage.setItem('n2_v8_stats', JSON.stringify(s)); } catch {}
+  try { localStorage.setItem('n2_v8_stats', JSON.stringify(s)); } catch {} 
 };
 
 // 上傳單筆錯題到 Google Sheets
@@ -81,25 +81,44 @@ function App() {
   const [results, setResults] = useState([]);
   const [stats, setStats] = useState(loadStats);
 
-  // 啟動時從 Google Sheets 讀取題庫
+  // 啟動時從 Google Sheets 讀取題庫（JSONP，解決 CORS）
   useEffect(() => {
-    const fetchQuestions = async () => {
-      try {
-        const res = await fetch(API_URL + '?t=' + Date.now());
-        const data = await res.json();
-        if (data.status === 'ok' && data.questions.length > 0) {
-          setQuestions(data.questions);
-        } else {
-          setQuestions(FALLBACK_QUESTIONS);
-          setLoadError(true);
-        }
-      } catch (e) {
+    const cbName = 'n2cb_' + Date.now();
+    const script = document.createElement('script');
+    const timer = setTimeout(() => {
+      cleanup();
+      setQuestions(FALLBACK_QUESTIONS);
+      setLoadError(true);
+      setScreen('home');
+    }, 8000);
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      try { if (document.body.contains(script)) document.body.removeChild(script); } catch(e){}
+      delete window[cbName];
+    };
+
+    window[cbName] = (data) => {
+      cleanup();
+      if (data && data.status === 'ok' && data.questions && data.questions.length > 0) {
+        setQuestions(data.questions);
+      } else {
         setQuestions(FALLBACK_QUESTIONS);
         setLoadError(true);
       }
       setScreen('home');
     };
-    fetchQuestions();
+
+    script.onerror = () => {
+      cleanup();
+      setQuestions(FALLBACK_QUESTIONS);
+      setLoadError(true);
+      setScreen('home');
+    };
+
+    script.src = API_URL + '?callback=' + cbName + '&t=' + Date.now();
+    document.body.appendChild(script);
+    return () => cleanup();
   }, []);
 
   const updateStats = (ns) => { setStats(ns); saveStats(ns); };

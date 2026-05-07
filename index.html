@@ -80,6 +80,9 @@ function App() {
   const [selected, setSelected] = useState(null);
   const [results, setResults] = useState([]);
   const [stats, setStats] = useState(loadStats);
+  const [genLayer, setGenLayer] = useState(3);
+  const [genStatus, setGenStatus] = useState(null);
+  const [genMessage, setGenMessage] = useState('');
 
   // 啟動時從 Google Sheets 讀取題庫（JSONP，解決 CORS）
   useEffect(() => {
@@ -122,6 +125,67 @@ function App() {
   }, []);
 
   const updateStats = (ns) => { setStats(ns); saveStats(ns); };
+
+  const reloadQuestions = () => {
+    const cbName = 'n2reload_' + Date.now();
+    const script = document.createElement('script');
+    const timer = setTimeout(() => {
+      clearTimeout(timer);
+      try { if (document.body.contains(script)) document.body.removeChild(script); } catch(e){}
+      delete window[cbName];
+    }, 8000);
+    window[cbName] = (data) => {
+      clearTimeout(timer);
+      try { if (document.body.contains(script)) document.body.removeChild(script); } catch(e){}
+      delete window[cbName];
+      if (data && data.status === 'ok' && data.questions && data.questions.length > 0) {
+        setQuestions(data.questions);
+      }
+    };
+    script.onerror = () => {
+      clearTimeout(timer);
+      try { if (document.body.contains(script)) document.body.removeChild(script); } catch(e){}
+      delete window[cbName];
+    };
+    script.src = API_URL + '?callback=' + cbName + '&t=' + Date.now();
+    document.body.appendChild(script);
+  };
+
+  const generateQuestions = (l) => {
+    setGenStatus('loading');
+    setGenMessage('');
+    const cbName = 'n2gen_' + Date.now();
+    const script = document.createElement('script');
+    const timer = setTimeout(() => {
+      clearTimeout(timer);
+      try { if (document.body.contains(script)) document.body.removeChild(script); } catch(e){}
+      delete window[cbName];
+      setGenStatus('error');
+      setGenMessage('逾時，請重試');
+    }, 30000);
+    window[cbName] = (data) => {
+      clearTimeout(timer);
+      try { if (document.body.contains(script)) document.body.removeChild(script); } catch(e){}
+      delete window[cbName];
+      if (data && data.status === 'ok') {
+        setGenStatus('ok');
+        setGenMessage(`已新增 ${data.added} 題`);
+        reloadQuestions();
+      } else {
+        setGenStatus('error');
+        setGenMessage((data && data.message) || '生題失敗');
+      }
+    };
+    script.onerror = () => {
+      clearTimeout(timer);
+      try { if (document.body.contains(script)) document.body.removeChild(script); } catch(e){}
+      delete window[cbName];
+      setGenStatus('error');
+      setGenMessage('網路錯誤');
+    };
+    script.src = API_URL + '?action=generate&layer=' + l + '&callback=' + cbName + '&t=' + Date.now();
+    document.body.appendChild(script);
+  };
 
   const buildQueue = (l) => {
     const pool = questions.filter(q => q.layer === l);
@@ -272,10 +336,31 @@ function App() {
             </div>
           </button>
         )}
+
+        <div style={{ background: '#0f1520', border: '1px solid #388bfd30', borderRadius: '12px', padding: '1.25rem' }}>
+          <div style={{ fontSize: '10px', color: '#388bfd', marginBottom: '0.35rem' }}>✨ AI 生題</div>
+          <div style={{ color: '#e6edf3', fontWeight: 600, fontSize: '15px', marginBottom: '0.75rem' }}>新增 N2 練習題</div>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            {[{ l: 0, label: 'L0 動詞分類' }, { l: 1, label: 'L1 動詞變化' }, { l: 3, label: 'L3 N2句型' }].map(({ l, label }) => (
+              <button key={l} onClick={() => setGenLayer(l)}
+                style={{ flex: 1, padding: '0.4rem 0', fontSize: '10px', borderRadius: '6px', border: `1px solid ${genLayer === l ? '#388bfd' : '#21262d'}`, background: genLayer === l ? '#388bfd20' : 'transparent', color: genLayer === l ? '#388bfd' : '#484f58', cursor: 'pointer', fontFamily: 'inherit' }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => generateQuestions(genLayer)} disabled={genStatus === 'loading'}
+            style={{ width: '100%', background: genStatus === 'loading' ? '#21262d' : '#388bfd15', border: '1px solid #388bfd', borderRadius: '8px', padding: '0.75rem', color: '#388bfd', fontSize: '13px', fontWeight: 600, cursor: genStatus === 'loading' ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+            {genStatus === 'loading'
+              ? <><div style={{ width: '12px', height: '12px', border: '2px solid #388bfd', borderBottomColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /><span>Gemini 生題中...</span></>
+              : '+ 生成 5 題'}
+          </button>
+          {genStatus === 'ok' && <div style={{ fontSize: '11px', color: '#30a46c', marginTop: '0.5rem', textAlign: 'center' }}>✓ {genMessage}，題庫已更新</div>}
+          {genStatus === 'error' && <div style={{ fontSize: '11px', color: '#f85149', marginTop: '0.5rem', textAlign: 'center' }}>✗ {genMessage}</div>}
+        </div>
       </div>
 
       <div style={{ marginTop: '2rem', fontSize: '10px', color: '#30363d', textAlign: 'center', lineHeight: 1.8 }}>
-        正確率 60% 解鎖下一層 · 錯題出現機率 x3<br />錯題自動上傳 Google Sheets · Gemini 每週更新題庫
+        正確率 60% 解鎖下一層 · 錯題出現機率 x3<br />錯題自動上傳 Google Sheets · 手動觸發 Gemini 生題
       </div>
     </div>
   );
